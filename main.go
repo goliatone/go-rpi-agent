@@ -16,6 +16,7 @@ import (
 	"github.com/twinj/uuid"
 )
 
+//TODO: make configurable
 const (
 	uuidFile = "/usr/local/src/rpi-agent/metadata/.device_uuid"
 )
