@@ -1,0 +1,28 @@
+#!/bin/bash
+
+function build:rpi {
+    env GOOS=linux GOARCH=arm GOARM=5 go build -o rpi-agent main.go
+}
+
+function build:release {
+    BUILD_DATE=`date -u +%Y%m%d.%H%M%S`
+    VERSION=${1:-0.0.1}
+    echo "go build ldflags -X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE"
+    env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE" -o rpi-agent main.go
+}
+
+function build:mv {
+    build:release $1    
+    ssh pi@openberry.local -C "sudo systemctl stop rpi-agent.service"
+    scp rpi-agent pi@openberry.local:/home/pi/CODE/go-rpi-agent/
+    ssh pi@openberry.local -C "sudo systemctl start rpi-agent.service"
+}
+
+function help {
+    echo "$0 <task> <args>"
+    echo "Tasks:"
+    compgen -A function | grep -v '^_' | cat -n
+}
+
+TIMEFORMAT="Task completed in %3lR"
+time ${@:-help}
