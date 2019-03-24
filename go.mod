@@ -1,4 +1,4 @@
-module goliatone.com/go-rpi-agent
+module github.com/goliatone/go-rpi-agent
 
 require (
 	github.com/cenkalti/backoff v2.1.1+incompatible // indirect
