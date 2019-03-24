@@ -1,0 +1,15 @@
+[Unit]
+Description=RPI MDNS agent
+Before=network.target
+ 
+[Service]
+Type=simple
+Restart=always
+User=pi
+WorkingDirectory=/usr/local/bin/
+ExecStart=/usr/local/bin/rpi-agent
+StandardOutput=syslog
+StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target
