@@ -55,3 +55,11 @@ https://github.com/mikkergimenez/distmon/blob/master/proc/main.go
 Implement SocketShell:
 https://github.com/gravitational/console-demo
 -->
+
+## Metrics
+
+TODO 
+- [ ] Create Prometheus endpoint for [metrics](https://prometheus.io/docs/concepts/metric_types/)
+- [ ] Fluentbit [fluentd agent](https://fluentbit.io/)
+    - [ ] arm info [here](https://fluentbit.io/documentation/0.12/installation/raspberry_pi.html)
+- [ ] Add `ExecStop` and `ExecReload` to rpi service.
