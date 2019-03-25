@@ -1,21 +1,87 @@
 #!/bin/bash
 
-function build:rpi {
+function gvm:install {
+    echo "go version should be go1.11"
+    echo ""
+    echo "run following commands"
+    echo "gvm pkgset create go-rpi-builder"
+    echo "gvm pkgset use go-rpi-builder"
+    echo "go mod download"
+}
+
+function rpi:build {
+    echo "building rpi-agent..."
     env GOOS=linux GOARCH=arm GOARM=5 go build -o rpi-agent main.go
 }
 
-function build:release {
+function rpi:mv {
+    echo "update agent..."
+    echo "stop rpi-agent service"
+    ssh $RPI_USER@$RPI_HOST -C "sudo systemctl stop rpi-agent.service"
+
+    #TODO: we prob want to give it a random name to prevent clashes
+    echo "move agent tmp directory..."
+    scp rpi-agent $RPI_USER@$RPI_HOST:/tmp/rpi-agent
+    
+    echo "move agent to final destination directory..."
+    ssh $RPI_USER@$RPI_HOST -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
+
+    echo "start rpi-agent service"
+    ssh $RPI_USER@$RPI_HOST -C "sudo systemctl start rpi-agent.service"
+}
+
+if [ -z ${RPI_USER+x} ]; then 
+    RPI_USER=pi
+fi
+
+if [ -z ${RPI_HOST+x} ]; then 
+    RPI_HOST=raspberry.local
+fi
+
+if [ -z ${RPI_UUID+x} ]; then 
+    RPI_UUID=$(uuidgen)
+fi
+
+function release:build {
     BUILD_DATE=`date -u +%Y%m%d.%H%M%S`
     VERSION=${1:-0.0.1}
     echo "go build ldflags -X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE"
     env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE" -o rpi-agent main.go
 }
 
-function build:mv {
-    build:release $1    
-    ssh pi@openberry.local -C "sudo systemctl stop rpi-agent.service"
-    scp rpi-agent pi@openberry.local:/home/pi/CODE/go-rpi-agent/
-    ssh pi@openberry.local -C "sudo systemctl start rpi-agent.service"
+function release:update {
+    echo "release upddate..."
+    release:build $1  
+    rpi:mv
+}
+
+function service:install {
+    echo "service install..."
+
+    rpi:build 
+
+    echo "scp service to $RPI_USER@$RPI_HOST..."
+    scp ./service/rpi-agent.service $RPI_USER@$RPI_HOST:/tmp/rpi-agent.service
+
+    echo "mv service..."
+    ssh $RPI_USER@$RPI_HOST -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
+
+    echo "chmod service..."
+    ssh $RPI_USER@$RPI_HOST -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
+
+    echo "mkdir for metadata"
+    ssh $RPI_USER@$RPI_HOST -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
+
+    echo "set user $RPI_USER as metadata owner"
+    ssh $RPI_USER@$RPI_HOST -C "sudo chown -R $RPI_USER /usr/local/src/rpi-agent/"
+
+    echo "Create default UUID"
+    # ssh $RPI_USER@$RPI_HOST -C "echo $(cat /proc/sys/kernel/random/uuid) > /usr/local/src/rpi-agent/metadata/.device_uuid"
+    
+    METADATA="/usr/local/src/rpi-agent/metadata"
+    ssh $RPI_USER@$RPI_HOST -C "if [ -s diff.txt ]; then echo $RPI_UUID > ${METADTATA}/.device_uuid ; fi"
+    
+    rpi:mv
 }
 
 function help {
@@ -26,3 +92,4 @@ function help {
 
 TIMEFORMAT="Task completed in %3lR"
 time ${@:-help}
+
