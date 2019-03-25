@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/grandcat/zeroconf"
 	"github.com/twinj/uuid"
@@ -116,6 +117,11 @@ func startService(deviceUUID string) {
 
 	metadata["serial"] = serial
 
+	startTime := time.Now()
+	metadata["agent_start"] = startTime.Unix()
+
+	metadata["agent_uptime"] = time.Since(startTime)
+
 	metadata["hostname"] = host + ".local"
 
 	mac, err := getMac("wlan0")
@@ -133,6 +139,9 @@ func startService(deviceUUID string) {
 	output["alias"] = serial
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		//Update our uptime
+		metadata["agent_uptime"] = time.Since(startTime)
+
 		rw.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(rw).Encode(output)
 	})
@@ -175,8 +184,8 @@ func post(url string, jsonData []byte) (*http.Response, error) {
 	return resp, nil
 }
 
-func getAddress() (map[string]string, error) {
-	output := make(map[string]string)
+func getAddress() (map[string]interface{}, error) {
+	output := make(map[string]interface{})
 	inter, err := net.Interfaces()
 	if err != nil {
 		return nil, err
