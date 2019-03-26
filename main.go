@@ -113,12 +113,13 @@ func startService(deviceUUID string) {
 	handleError(err, "Error GetAddress: ")
 
 	serial, err := getSerial()
-	handleError(err, "Error GetAddress: ")
+	handleError(err, "Error GetSerial: ")
 
 	metadata["serial"] = serial
 
 	startTime := time.Now()
-	metadata["agent_start"] = startTime.Unix()
+	// metadata["agent_start"] = startTime.Unix()
+	metadata["agent_start"] = startTime.Format(time.RFC3339)
 
 	metadata["agent_uptime"] = time.Since(startTime)
 
@@ -140,7 +141,7 @@ func startService(deviceUUID string) {
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		//Update our uptime
-		metadata["agent_uptime"] = time.Since(startTime)
+		metadata["agent_uptime"] = time.Now().Sub(startTime)
 
 		rw.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(rw).Encode(output)
