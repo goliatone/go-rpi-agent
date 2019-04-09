@@ -11,7 +11,7 @@ function gvm:install {
 
 function rpi:build {
     echo "building rpi-agent..."
-    env GOOS=linux GOARCH=arm GOARM=5 go build -o rpi-agent main.go
+    env GOOS=linux GOARCH=arm GOARM=5 go build -o ./bin/arm/rpi-agent main.go
 }
 
 function rpi:mv {
@@ -21,7 +21,7 @@ function rpi:mv {
 
     #TODO: we prob want to give it a random name to prevent clashes
     echo "move agent tmp directory..."
-    scp rpi-agent $RPI_USER@$RPI_HOST:/tmp/rpi-agent
+    scp ./bin/arm/rpi-agent $RPI_USER@$RPI_HOST:/tmp/rpi-agent
     
     echo "move agent to final destination directory..."
     ssh $RPI_USER@$RPI_HOST -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
@@ -46,13 +46,22 @@ function release:build {
     BUILD_DATE=`date -u +%Y%m%d.%H%M%S`
     VERSION=${1:-0.0.1}
     echo "go build ldflags -X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE"
-    env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE" -o rpi-agent main.go
+    env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE" -o ./bin/arm/rpi-agent main.go
 }
 
 function release:update {
     echo "release upddate..."
     release:build $1  
     rpi:mv
+}
+
+function publish:jfrog {
+    cd ./bin/arm/
+    tar -czvf rpi-agent.tar.gz rpi-agent
+    cd -
+
+    TAG=${1:0.0.1}
+    curl -H "X-JFrog-Art-Api:$ARTIFACTORY_APIKEY" -T ./bin/arm/rpi-agent.tar.gz "${ARTIFACTORY_URL}/rpi-agent.${TAG}.tar.gz"
 }
 
 function service:install {
@@ -68,6 +77,12 @@ function service:install {
 
     echo "chmod service..."
     ssh $RPI_USER@$RPI_HOST -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
+
+    echo "reload systemctl daemon"
+    ssh $RPI_USER@$RPI_HOST -C "sudo systemctl daemon-reload"
+    
+    echo "Enable daemon"
+    ssh $RPI_USER@$RPI_HOST -C "sudo systemctl enable rpi-agent"
 
     echo "mkdir for metadata"
     ssh $RPI_USER@$RPI_HOST -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
