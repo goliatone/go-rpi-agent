@@ -1,35 +1,5 @@
 #!/bin/bash
 
-function gvm:install {
-    echo "go version should be go1.11"
-    echo ""
-    echo "run following commands"
-    echo "gvm pkgset create go-rpi-builder"
-    echo "gvm pkgset use go-rpi-builder"
-    echo "go mod download"
-}
-
-function rpi:build {
-    echo "building rpi-agent..."
-    env GOOS=linux GOARCH=arm GOARM=5 go build -o rpi-agent main.go
-}
-
-function rpi:mv {
-    echo "update agent..."
-    echo "stop rpi-agent service"
-    ssh $RPI_USER@$RPI_HOST -C "sudo systemctl stop rpi-agent.service"
-
-    #TODO: we prob want to give it a random name to prevent clashes
-    echo "move agent tmp directory..."
-    scp rpi-agent $RPI_USER@$RPI_HOST:/tmp/rpi-agent
-    
-    echo "move agent to final destination directory..."
-    ssh $RPI_USER@$RPI_HOST -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
-
-    echo "start rpi-agent service"
-    ssh $RPI_USER@$RPI_HOST -C "sudo systemctl start rpi-agent.service"
-}
-
 if [ -z ${RPI_USER+x} ]; then 
     RPI_USER=pi
 fi
@@ -42,11 +12,48 @@ if [ -z ${RPI_UUID+x} ]; then
     RPI_UUID=$(uuidgen)
 fi
 
+function gvm:install {
+    echo "go version should be go1.11"
+    echo ""
+    echo "run following commands"
+    echo "gvm pkgset create go-rpi-builder"
+    echo "gvm pkgset use go-rpi-builder"
+    echo "go mod download"
+}
+
+function rpi:build {
+    echo "building rpi-agent..."
+    env GOOS=linux GOARCH=arm GOARM=5 go build -o ./bin/arm/rpi-agent main.go
+}
+
+function rpi:mv {
+    echo "update agent..."
+    echo "stop rpi-agent service"
+    
+    readonly user=${1:-$RPI_USER}
+    readonly host=${2:-$RPI_HOST}
+
+    ssh $user@$host -C "sudo systemctl stop rpi-agent.service"
+
+    #TODO: we prob want to give it a random name to prevent clashes
+    echo "move agent tmp directory..."
+    scp ./bin/arm/rpi-agent $user@$host:/tmp/rpi-agent
+    
+    echo "move agent to final destination directory..."
+    ssh $user@$host -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
+
+    echo "start rpi-agent service"
+    ssh $user@$host -C "sudo systemctl start rpi-agent.service"
+}
+
 function release:build {
-    BUILD_DATE=`date -u +%Y%m%d.%H%M%S`
+    mkdir -p ./bin/arm
+    
     VERSION=${1:-0.0.1}
+    BUILD_DATE=`date -u +%Y%m%d.%H%M%S`
+    
     echo "go build ldflags -X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE"
-    env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE" -o rpi-agent main.go
+    env GOOS=linux GOARCH=arm GOARM=5 go build -ldflags "-X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE" -o ./bin/arm/rpi-agent main.go
 }
 
 function release:update {
@@ -58,34 +65,47 @@ function release:update {
 function service:install {
     echo "service install..."
 
+    readonly user=${1:-$RPI_USER}
+    readonly host=${2:-$RPI_HOST}
+    readonly uuid=${3:-$RPI_UUID}
+
     rpi:build 
 
-    echo "scp service to $RPI_USER@$RPI_HOST..."
-    scp ./service/rpi-agent.service $RPI_USER@$RPI_HOST:/tmp/rpi-agent.service
+    echo "scp service to $user@$host..."
+    scp ./service/rpi-agent.service $user@$host:/tmp/rpi-agent.service
 
     echo "mv service..."
-    ssh $RPI_USER@$RPI_HOST -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
+    ssh $user@$host -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
 
     echo "chmod service..."
-    ssh $RPI_USER@$RPI_HOST -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
+    ssh $user@$host -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
 
     echo "mkdir for metadata"
-    ssh $RPI_USER@$RPI_HOST -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
+    ssh $user@$host -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
 
-    echo "set user $RPI_USER as metadata owner"
-    ssh $RPI_USER@$RPI_HOST -C "sudo chown -R $RPI_USER /usr/local/src/rpi-agent/"
+    echo "set user $user as metadata owner"
+    ssh $user@$host -C "sudo chown -R $user /usr/local/src/rpi-agent/"
 
-    echo "Create default UUID"
-    # ssh $RPI_USER@$RPI_HOST -C "echo $(cat /proc/sys/kernel/random/uuid) > /usr/local/src/rpi-agent/metadata/.device_uuid"
+    # echo "Create default UUID"
+    # ssh $user@$host -C "echo $(cat /proc/sys/kernel/random/uuid) > /usr/local/src/rpi-agent/metadata/.device_uuid"
     
-    METADATA="/usr/local/src/rpi-agent/metadata"
-    ssh $RPI_USER@$RPI_HOST -C "if [ -s diff.txt ]; then echo $RPI_UUID > ${METADTATA}/.device_uuid ; fi"
+    METADATA="/usr/local/src/rpi-agent/metadata/.device_uuid"
+    ssh $user@$host -C "if [ ! -e $METADATA ]; then echo $uuid > ${METADATA}; fi"
     
-    rpi:mv
+    rpi:mv $user $host
+}
+
+function test:service {
+    readonly host=${1:-$RPI_HOST}
+    curl -s $host:8080 | jq
+}
+
+function version:bump {
+    echo "TODO :)"
 }
 
 function help {
-    echo "$0 <task> <args>"
+    echo "run <task> <args>"
     echo "Tasks:"
     compgen -A function | grep -v '^_' | cat -n
 }
