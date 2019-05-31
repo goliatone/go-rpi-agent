@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -9,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"regexp"
 	"strings"
 	"time"
@@ -28,8 +31,17 @@ var VERSION string
 //BUILD_DATE Generated via ld flags
 var BUILD_DATE string
 
-func main() {
+var (
+	name    = flag.String("name", "rpi-agent", "Set the agents name, default is rpi-agent.")
+	domain  = flag.String("domain", "local", "Set the search domain. For local networks, default is fine.")
+	service = flag.String("service", "_rpi._tcp", "Set the service category to look for devices.")
+	port    = flag.Int("port", 8080, "Service port.")
+)
 
+func main() {
+	flag.Parse()
+
+	//TODO: Take parameters for name, service...
 	deviceUUID := getDefaultUUID()
 	fmt.Println("device uuid: " + deviceUUID)
 
@@ -43,23 +55,32 @@ func main() {
 		"uuid=" + deviceUUID,
 	}
 
+	n := *name
+	s := *service
+	d := *domain
 	service, err := zeroconf.Register(
-		"hid-reader", // service instance name
-		"_rpi._tcp",  // service type and protocl
-		"local.",     // service domain
-		8080,         // service port
+		n, // service instance name
+		s,  // service type and protocl
+		fmt.Sprintf("%s.", d),     // service domain
+		*port,         // service port
 		txtRecord,    // service metadata
 		nil,          // register on all network interfaces
 	)
+
+	defer service.Shutdown()
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	defer service.Shutdown()
+	//Clean exit
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	// Sleep forever
-	select {}
+	select {
+	case <- sig:
+	}
+	log.Println("Sutting down service...")
 }
 
 func getDefaultUUID() string {
@@ -147,10 +168,11 @@ func startService(deviceUUID string) {
 		json.NewEncoder(rw).Encode(output)
 	})
 
-	log.Println("starting HTTP instrospection service...")
-	log.Printf("service available at: %s:8080", host)
+	p := fmt.Sprintf(":%d", *port)
+	log.Println("Starting HTTP instrospection service...")
+	log.Printf("Service available at: %s%s", host, p)
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(p, nil); err != nil {
 		log.Fatal(err)
 	}
 }
