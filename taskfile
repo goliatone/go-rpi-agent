@@ -21,7 +21,14 @@ function gvm:install {
     echo "go mod download"
 }
 
+function mac:build {
+    mkdir -p ./bin/darwin
+    echo "building rpi-agent..."
+    go build -o ./bin/darwin/rpi-agent main.go
+}
+
 function rpi:build {
+    mkdir -p ./bin/arm
     echo "building rpi-agent..."
     env GOOS=linux GOARCH=arm GOARM=5 go build -o ./bin/arm/rpi-agent main.go
 }
@@ -30,8 +37,8 @@ function rpi:mv {
     echo "update agent..."
     echo "stop rpi-agent service"
     
-    readonly user=${1:-$RPI_USER}
-    readonly host=${2:-$RPI_HOST}
+    local user=${1:-$RPI_USER}
+    local host=${2:-$RPI_HOST}
 
     ssh $user@$host -C "sudo systemctl stop rpi-agent.service"
 
@@ -58,18 +65,24 @@ function release:build {
 
 function release:update {
     echo "release upddate..."
-    release:build $1  
-    rpi:mv
+    local user=${1:-$RPI_USER}
+    local host=${2:-$RPI_HOST}
+    local tag=${3:-0.0.1}
+
+    release:build $tag 
+    rpi:mv $user $host
+    test:service $host
 }
 
 function service:install {
     echo "service install..."
 
-    readonly user=${1:-$RPI_USER}
-    readonly host=${2:-$RPI_HOST}
-    readonly uuid=${3:-$RPI_UUID}
+    local user=${1:-$RPI_USER}
+    local host=${2:-$RPI_HOST}
+    local uuid=${3:-$RPI_UUID}
+    local tag=${4:-0.0.1}
 
-    rpi:build 
+    release:build $tag
 
     echo "scp service to $user@$host..."
     scp ./service/rpi-agent.service $user@$host:/tmp/rpi-agent.service
@@ -93,15 +106,19 @@ function service:install {
     ssh $user@$host -C "if [ ! -e $METADATA ]; then echo $uuid > ${METADATA}; fi"
     
     rpi:mv $user $host
+
+    test:service $host
 }
 
 function test:service {
-    readonly host=${1:-$RPI_HOST}
+    local host=${1:-$RPI_HOST}
     curl -s $host:8080 | jq
 }
 
 function version:bump {
     echo "TODO :)"
+    # https://stackoverflow.com/questions/4485399/how-can-i-bump-a-version-number-using-bash
+    # https://gist.github.com/andyexeter/da932c9644d832e3be6706d20d539ff7
 }
 
 function help {
