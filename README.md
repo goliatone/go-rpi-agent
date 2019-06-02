@@ -1,47 +1,15 @@
 ## Installation
 
-To install the service:
+To install the service run the `taskfile`:
 
 ```
-cp ./service/rpi-agent.service /etc/systemd/system/rpi-agent.service
-sudo chmod 644 /etc/systemd/system/rpi-agent.service
+$ run service:install <USER> <HOST> <UUID>
 ```
 
-If you make changes to the service then:
-
-```
-sudo systemctl daemon-reload
-```
-
-Or stop:
-
-```
-sudo systemctl stop rpi-agent.service
-```
-
-```
-sudo systemctl start rpi-agent.service
-sudo systemctl enable rpi-agent.service
-```
-
-Make directory to store configuration and device info:
-
-```
-sudo mkdir -p /usr/local/src/rpi-agent/metadata
-```
-
-Make `pi` owner of these directories:
-
-```
-sudo chown -R pi /usr/local/src/rpi-agent/
-```
-
-Create file with default `uuid`:
-
-```
-uuid -v4 -o /usr/local/src/rpi-agent/metadata/.device_uuid
-```
-
+Where:
+* USER: RPi user, e.g. `pi`
+* HOST: RPi host, e.g. `raspberrypi.local`
+* UUID: RPi instance ID, e.g. `20d520b5-1f94-412e-9dd6-d6b11aa89b06`
 
 <!--
 Integrate stats:
@@ -54,11 +22,28 @@ https://github.com/mikkergimenez/distmon/blob/master/proc/main.go
 
 Implement SocketShell:
 https://github.com/gravitational/console-demo
+
+
+Reporter:
+https://github.com/jondot/groundcontrol
+
+Ticker: 
+
+```go
+refresh := 5
+refreshes := time.NewTicker(time.Second * time.Duration(refresh)).C
+go func() {
+    for range refreshes {
+        log.Print("Got empty zwave response...")
+    }
+}()
+```
 -->
 
 ## Metrics
 
-TODO 
+TODO
+- [ ] Is there a way to configure refresh rate of MDNS client?
 - [ ] Create Prometheus endpoint for [metrics](https://prometheus.io/docs/concepts/metric_types/)
 - [ ] Fluentbit [fluentd agent](https://fluentbit.io/)
     - [ ] arm info [here](https://fluentbit.io/documentation/0.12/installation/raspberry_pi.html)
