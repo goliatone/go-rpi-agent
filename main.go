@@ -67,6 +67,9 @@ func main() {
 		nil,          // register on all network interfaces
 	)
 
+	//Seconds, default value is 3200
+	service.TTL()
+
 	defer service.Shutdown()
 
 	if err != nil {
