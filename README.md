@@ -38,11 +38,27 @@ go func() {
     }
 }()
 ```
+
+Upload to artifactory:
+curl -H "X-JFrog-Art-Api:$ARTIFACTORY_APIKEY" -T ./bin/arm/rpi-agent.tar.gz "${ARTIFACTORY_URL}/${ARTIFACTORY_PATH}/rpi-agent.tar.gz"
+
+macos dns:
+dns-sd -B _rpi._tcp .
+
+how to set TTL for record?
 -->
 
 ## Metrics
 
 TODO
+
+- [ ] Take URL endpoint from flags
+- [ ] Refactor to use external template to configure POST payload
+- [ ] Add flag to run timer for POST payload
+- [ ] Refactor so we collect data dynamically:
+    - [ ] Each function should take output map and add its result to it, e.g.: getMac(&out)
+    - [ ] These collectors should be a plugin interface to be loaded
+
 - [ ] Is there a way to configure refresh rate of MDNS client?
 - [ ] Create Prometheus endpoint for [metrics](https://prometheus.io/docs/concepts/metric_types/)
 - [ ] Fluentbit [fluentd agent](https://fluentbit.io/)
