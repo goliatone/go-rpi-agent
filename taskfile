@@ -40,17 +40,19 @@ function rpi:mv {
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
 
-    ssh $user@$host -C "sudo systemctl stop rpi-agent.service"
+    local certs="-i $dir/ops/certs/dkit_rsa"
+
+    ssh $certs $user@$host -C "sudo systemctl stop rpi-agent.service"
 
     #TODO: we prob want to give it a random name to prevent clashes
     echo "move agent tmp directory..."
-    scp ./bin/arm/rpi-agent $user@$host:/tmp/rpi-agent
+    scp $certs ./bin/arm/rpi-agent $user@$host:/tmp/rpi-agent
     
     echo "move agent to final destination directory..."
-    ssh $user@$host -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
+    ssh $certs $user@$host -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
 
     echo "start rpi-agent service"
-    ssh $user@$host -C "sudo systemctl start rpi-agent.service"
+    ssh $certs $user@$host -C "sudo systemctl start rpi-agent.service"
 }
 
 function release:build {
@@ -82,30 +84,37 @@ function service:install {
     local uuid=${3:-$RPI_UUID}
     local tag=${4:-0.0.1}
 
+    local dir
+    dir=$(pwd)
+    local certs="-i $dir/ops/certs/dkit_rsa"
+
     release:build $tag
 
     echo "scp service to $user@$host..."
-    scp ./service/rpi-agent.service $user@$host:/tmp/rpi-agent.service
+    scp $certs ./service/rpi-agent.service $user@$host:/tmp/rpi-agent.service
 
     echo "mv service..."
-    ssh $user@$host -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
+    ssh $certs $user@$host -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
 
     echo "chmod service..."
-    ssh $user@$host -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
+    ssh $certs $user@$host -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
 
     echo "mkdir for metadata"
-    ssh $user@$host -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
+    ssh $certs $user@$host -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
 
     echo "set user $user as metadata owner"
-    ssh $user@$host -C "sudo chown -R $user /usr/local/src/rpi-agent/"
+    ssh $certs $user@$host -C "sudo chown -R $user /usr/local/src/rpi-agent/"
 
     # echo "Create default UUID"
     # ssh $user@$host -C "echo $(cat /proc/sys/kernel/random/uuid) > /usr/local/src/rpi-agent/metadata/.device_uuid"
     
     METADATA="/usr/local/src/rpi-agent/metadata/.device_uuid"
-    ssh $user@$host -C "if [ ! -e $METADATA ]; then echo $uuid > ${METADATA}; fi"
+    ssh $certs $user@$host -C "if [ ! -e $METADATA ]; then echo $uuid > ${METADATA}; fi"
     
     rpi:mv $user $host
+
+    #When we change the service definition we want to reload systemctl to pick up changes
+    ssh $certs $user@$host -C "sudo systemctl daemon-reload"
 
     test:service $host
 }
