@@ -50,7 +50,39 @@ how to set TTL for record?
 
 ## Metrics
 
-TODO
+Refactoring:
+1. Use a template for output
+2. Collect metrics/data using a plugin architecture
+
+### Template output
+
+- [ ] Add flag with path to template
+- [ ] Create default template
+
+
+### Data Collection
+
+- [ ] Add flag to directory with plugins
+- [ ] Define plugin interface
+- [ ] Define typedef for:
+    - [ ] Measurement
+    - [ ] Store
+
+```go
+type Meassurement struct {
+    Key string
+    Value interface{}
+    Time int64
+}
+
+type Store interface {
+    func set(m Meassurement)
+    func serialize()
+}
+```
+
+
+TODO:
 
 - [ ] Take URL endpoint from flags
 - [ ] Refactor to use external template to configure POST payload
