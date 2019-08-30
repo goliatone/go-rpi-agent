@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+SERVICE_NAME=rpi-agent
+
+sudo systemctl stop "$SERVICE_NAME.service" || echo "Service not running..."
+
+sudo rm "/usr/local/bin/$SERVICE_NAME" || echo "Unable to remove $SERVICE_NAME"
+sudo rm -r "/opt/$SERVICE_NAME" || echo "Unable to remove /opt/$SERVICE_NAME"
+sudo rm -r "/var/log/$SERVICE_NAME" || echo "Unable to remove /var/log/$SERVICE_NAME"
+sudo rm "/etc/rsyslog.d/$SERVICE_NAME.conf" || echo "Unable to remove /etc/rsyslog.d/$SERVICE_NAME"
+sudo rm "/etc/systemd/system/$SERVICE_NAME.service" || echo "Unable to remove /etc/systemd/system/$SERVICE_NAME.service"
+
+sudo systemctl daemon-reload
+sudo systemctl restart rsyslog
