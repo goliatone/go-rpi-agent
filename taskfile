@@ -12,6 +12,11 @@ if [ -z ${RPI_UUID+x} ]; then
     RPI_UUID=$(uuidgen)
 fi
 
+if [ -z ${SERVICE_NAME+x} ]; then 
+    SERVICE_NAME=rpi-builder
+fi
+
+
 function gvm:install {
     echo "go version should be go1.11"
     echo ""
@@ -76,47 +81,88 @@ function release:update {
     test:service $host
 }
 
+# install binary and service on host machine
+# We can pass an env file with values that will
+# be available for the running service.
+# 
+# @arg 1 {string} [user=pi] Username
+# @arg 2 {string} [host=raspberry] Hostname
+# @arg 3 {string} envfile Env file used for service
+# @arg 4 {string} [tag=0.0.1]
 function service:install {
-    echo "service install..."
 
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
-    local uuid=${3:-$RPI_UUID}
+    local envfile=$3
+    # local uuid=${3:-$RPI_UUID}
     local tag=${4:-0.0.1}
 
     local dir
     dir=$(pwd)
+
     local certs="-i $dir/ops/certs/dkit_rsa"
 
     release:build $tag
 
-    echo "scp service to $user@$host..."
-    scp $certs ./service/rpi-agent.service $user@$host:/tmp/rpi-agent.service
-
-    echo "mv service..."
-    ssh $certs $user@$host -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
-
-    echo "chmod service..."
-    ssh $certs $user@$host -C "sudo chmod 644 /etc/systemd/system/rpi-agent.service"
-
-    echo "mkdir for metadata"
-    ssh $certs $user@$host -C "sudo mkdir -p /usr/local/src/rpi-agent/metadata"
-
-    echo "set user $user as metadata owner"
-    ssh $certs $user@$host -C "sudo chown -R $user /usr/local/src/rpi-agent/"
-
-    # echo "Create default UUID"
-    # ssh $user@$host -C "echo $(cat /proc/sys/kernel/random/uuid) > /usr/local/src/rpi-agent/metadata/.device_uuid"
-    
-    METADATA="/usr/local/src/rpi-agent/metadata/.device_uuid"
-    ssh $certs $user@$host -C "if [ ! -e $METADATA ]; then echo $uuid > ${METADATA}; fi"
-    
     rpi:mv $user $host
 
-    #When we change the service definition we want to reload systemctl to pick up changes
-    ssh $certs $user@$host -C "sudo systemctl daemon-reload"
+    if [ -z "$envfile" ]; then
+        echo "we are using default env configuration for device..."
+    else
+        ssh "$certs" "$user@$host" -C "sudo -u$user mkdir -p /tmp/service/opt/$SERVICE_NAME/"
+        scp "$certs" "$envfile" "$user@$host":/tmp/service/opt/$SERVICE_NAME/$SERVICE_NAME.env 
+    fiq
+    
+    ssh "$certs" "$user@$host" 'bash -s' < "$dir/$script"
 
     test:service $host
+}
+
+# update binary and service on host machine
+# @arg 1 {string} [user=pi] Username
+# @arg 2 {string} [host=raspberry] Hostname
+# @arg 3 {string} envfile Env file used for service
+# @arg 4 {string} tag If present triggers binary build
+function service:update {
+    
+    local user=${1:-$RPI_USER}
+    local host=${2:-$RPI_HOST}
+    local envfile=$3
+    local script="ops/scripts/uninstaller"
+
+    local dir
+    dir=$(pwd)
+
+    local certs="-i $dir/ops/certs/dkit_rsa"
+
+    # if [ -z ${envfile+x} ]; then 
+    if [ -z "$envfile" ]; then
+        echo "use default env configuration for device $user@$host"
+    else
+        scp "$certs" "$envfile" "$user@$host":/opt/$SERVICE_NAME/$SERVICE_NAME.env 
+    fi
+
+    if [ -z "$4" ]; then
+        release:build $4
+    fi
+
+    rpi:mv "$user" "$host"
+}
+
+# uninstall binary and service on host machine
+# @arg 1 {string} [user=pi]
+# @arg 2 {string} [host=raspberry]
+function service:uninstall {
+    local user=${1:-$RPI_USER}
+    local host=${2:-$RPI_HOST}
+    local script="ops/scripts/uninstaller"
+
+    local dir
+    dir=$(pwd)
+
+    local certs="-i $dir/ops/certs/dkit_rsa"
+
+    ssh "$certs" "$user@$host" 'bash -s' < "$dir/$script"
 }
 
 function test:service {
