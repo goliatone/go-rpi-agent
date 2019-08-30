@@ -1,5 +1,5 @@
 [Unit]
-Description=RPI MDNS agent
+Description=RPI agent
 Before=network.target
  
 [Service]
@@ -7,9 +7,11 @@ Type=simple
 Restart=always
 User=pi
 WorkingDirectory=/usr/local/bin/
-ExecStart=/usr/local/bin/rpi-agent
+EnvironmentFile=/opt/rpi-agent/rpi-agent.env
+ExecStart=/usr/local/bin/rpi-agent $OPTIONS
 StandardOutput=syslog
 StandardError=syslog
+SyslogIdentifier=rpi-agent
 
 [Install]
 WantedBy=multi-user.target
