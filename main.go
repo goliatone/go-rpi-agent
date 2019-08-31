@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"text/template"
 
 	"github.com/grandcat/zeroconf"
 	"github.com/twinj/uuid"
@@ -37,7 +38,10 @@ var (
 	service		= flag.String("service", "_rpi._tcp", "Set the service category to look for devices.")
 	port    	= flag.Int("port", 8080, "Service port.")
 	registryUrl = flag.String("registry", "", "Registry service URL.")
+	tplPath		= flag.String("registry-tpl", "./templates/default.tpl.json", "Path to registry payload template.")
 )
+
+type Metadata map[string]interface{}
 
 func main() {
 	flag.Parse()
@@ -117,7 +121,7 @@ func startService(deviceUUID string) {
 	mac, err = getMac("eth0")
 	metadata["mac_eth0"] = mac
 
-	output := make(map[string]interface{})
+	output := make(Metadata)
 
 	output["metadata"] = metadata
 	output["uuid"] = deviceUUID
@@ -126,8 +130,7 @@ func startService(deviceUUID string) {
 	output["alias"] = serial
 
 	if registryUrl != nil {
-		jsonData := json.Marshal(output)
-		post(registryUrl, jsonData)
+		registerAgent(registryUrl, output)
 	}
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
@@ -152,8 +155,6 @@ func getNameFromHostname(hostname string, prefix string) string {
 	return prefix + hostname
 }
 
-
-
 func handleError(err error, msg string) {
 	if err != nil {
 		os.Stderr.WriteString(msg + err.Error() + "\n")
@@ -161,12 +162,29 @@ func handleError(err error, msg string) {
 	}
 }
 
-func post(url string, jsonData []byte) (*http.Response, error) {
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+func registerAgent(url string, meta Metadata) (*http.Response, error) {
+
+	t := template.New("payload")
+	tmpl, err := t.ParseFiles(tplPath)
+	
+	if err != nil {
+		log.Fatal("Parse: ", err)
+		return
+	}
+
+	var output bytes.Buffer 
+	if err = tmpl.Execute(&output, meta); err != nil {
+		log.Fatal("Execute template:", err)
+		return 
+	}
+
+	req, err := http.NewRequest("POST", url, output)
 
 	if err != nil {
 		return nil, err
 	}
+
+	log.Printf("POST: %s %s\n", url, string(jsonData))
 
 	req.Header.Set("Content-Type", "application/json")
 
@@ -175,7 +193,9 @@ func post(url string, jsonData []byte) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer resp.Body.Close()
+
 	return resp, nil
 }
 
@@ -204,8 +224,8 @@ func getMachineID() (string, error) {
 	return readMachineID("/etc/machine-id")
 }
 
-func getAddress() (map[string]interface{}, error) {
-	output := make(map[string]interface{})
+func getAddress() (Metadata, error) {
+	output := make(Metadata)
 	inter, err := net.Interfaces()
 	if err != nil {
 		return nil, err
