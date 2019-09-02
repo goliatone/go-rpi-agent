@@ -38,7 +38,7 @@ var (
 	service		= flag.String("service", "_rpi._tcp", "Set the service category to look for devices.")
 	port    	= flag.Int("port", 8080, "Service port.")
 	registryUrl = flag.String("registry", "", "Registry service URL.")
-	tplPath		= flag.String("registry-tpl", "./templates/default.tpl.json", "Path to registry payload template.")
+	tplPath		= flag.String("registry-tpl", "/opt/rpi-agent/templates/default.tpl.json", "Path to registry payload template.")
 )
 
 type Metadata map[string]interface{}
@@ -73,7 +73,7 @@ func main() {
 	)
 
 	//Seconds, default value is 3200
-	service.TTL()
+	service.TTL(3200)
 
 	defer service.Shutdown()
 
@@ -130,7 +130,7 @@ func startService(deviceUUID string) {
 	output["alias"] = serial
 
 	if registryUrl != nil {
-		registerAgent(registryUrl, output)
+		registerAgent(*registryUrl, output)
 	}
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
@@ -165,26 +165,26 @@ func handleError(err error, msg string) {
 func registerAgent(url string, meta Metadata) (*http.Response, error) {
 
 	t := template.New("payload")
-	tmpl, err := t.ParseFiles(tplPath)
+	tmpl, err := t.ParseFiles(*tplPath)
 	
 	if err != nil {
 		log.Fatal("Parse: ", err)
-		return
+		return nil,err
 	}
 
 	var output bytes.Buffer 
 	if err = tmpl.Execute(&output, meta); err != nil {
 		log.Fatal("Execute template:", err)
-		return 
+		return nil,err
 	}
 
-	req, err := http.NewRequest("POST", url, output)
+	req, err := http.NewRequest("POST", url, &output)
 
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("POST: %s %s\n", url, string(jsonData))
+	log.Printf("POST: %s %s\n", url, output)
 
 	req.Header.Set("Content-Type", "application/json")
 
@@ -199,11 +199,20 @@ func registerAgent(url string, meta Metadata) (*http.Response, error) {
 	return resp, nil
 }
 
+
+// func readMachineID(filepath string) (string, error) {
+// 	contents, err := ioutil.ReadFile(filepath)	
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	return string(contents), nil
+// }
+
 //machine-id is found in either /etc/machine-id or
 // /var/lib/dbus/machine-id 
 func getMachineID() (string, error) {
 
-	func readMachineID(filepath string) (string, error) {
+	readMachineID := func (filepath string) (string, error) {
 		contents, err := ioutil.ReadFile(filepath)	
 		if err != nil {
 			return "", err
@@ -218,7 +227,7 @@ func getMachineID() (string, error) {
 	}
 
 	if contents != "" {
-		return contents
+		return contents, nil
 	}
 
 	return readMachineID("/etc/machine-id")
