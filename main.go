@@ -46,6 +46,14 @@ var (
 //Metadata holds data we will send over to the registry
 type Metadata map[string]interface{}
 
+//Identifier are different key value pairs that help identify this device
+type Identifier struct {
+	Name string
+	Value string
+	Description string
+}
+
+
 func init() {
 	flag.Usage = func() {
 		fmt.Printf("Usage of %s:\n", "rpi-agent")
@@ -109,56 +117,68 @@ func main() {
 
 // HTTP service to introspect RPi instance
 func startService(deviceUUID string) {
-	host, _ := os.Hostname()
-	metadata, err := getAddress()
+
+	meta := make(Metadata)
+	meta["Uuid"] = deviceUUID
+	// meta["Name"] = getNameFromHostname(host, "")
+
+	err := addHost(meta)
+	handleError(err, "Error AddHost: ")
+
+	err = addIps(meta)
 	handleError(err, "Error GetAddress: ")
 
-	serial, err := getSerial()
+	err = addSerial(meta)
 	handleError(err, "Error GetSerial: ")
 
-	metadata["serial"] = serial
-
-	machineID, err := getMachineID()
+	err = addMachineID(meta)
 	handleError(err, "Error GetMachineID: ")
 
-	metadata["machine-id"] = machineID
+	err = addMac(meta)
+	handleError(err, "Error AddMac: ")
+
+	status := make(map[string]interface{})
 
 	startTime := time.Now()
-	// metadata["agent_start"] = startTime.Unix()
-	metadata["agent_start"] = startTime.Format(time.RFC3339)
+	status["agent_start"] = startTime.Format(time.RFC3339)
+	status["agent_uptime"] = time.Since(startTime)
+	
+	status["connectivity"] = "online"
 
-	metadata["agent_uptime"] = time.Since(startTime)
-
-	metadata["hostname"] = host + ".local"
-
-	mac, err := getMac("wlan0")
-	metadata["mac_wlan0"] = mac
-
-	mac, err = getMac("eth0")
-	metadata["mac_eth0"] = mac
-
-	output := make(Metadata)
-
-	output["metadata"] = metadata
-	output["Uuid"] = deviceUUID
-	output["name"] = getNameFromHostname(host, "")
-	output["status"] = "online"
-	output["alias"] = serial
+	meta["Status"] = status
 
 	if registryURL != nil {
-		registerAgent(*registryURL, output)
+		registerAgent(*registryURL, meta)
 	}
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		//Update our uptime
-		metadata["agent_uptime"] = time.Now().Sub(startTime)
+		status["agent_uptime"] = time.Now().Sub(startTime)
+
+		n := path.Base(*tplPath)
+		t := template.New(n)
+		tmpl, err := t.ParseFiles(*tplPath)
+	
+		if err != nil {
+			log.Fatal("Parse: ", err)
+			return 
+		}
+
+		var output bytes.Buffer 
+		if err = tmpl.Execute(&output, meta); err != nil {
+			log.Fatal("FATAL registerAgent: ", err)
+			return
+		}
 
 		rw.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(rw).Encode(output)
+		output.WriteTo(rw)
+		// json.NewEncoder(rw).Encode(output)
 	})
 
+	//Some meta info...
+	host, err := os.Hostname()
 	p := fmt.Sprintf(":%d", *port)
-	log.Println("Starting HTTP instrospection service...")
+	log.Println("Starting HTTP introspection service...")
 	log.Printf("Service available at: %s%s", host, p)
 
 	if err := http.ListenAndServe(p, nil); err != nil {
@@ -234,6 +254,20 @@ func registerAgent(url string, meta Metadata) (*http.Response, error) {
 // 	return string(contents), nil
 // }
 
+func getDefaultUUID() string {
+	if dat, _ := ioutil.ReadFile(uuidFile); dat != nil {
+		uuid := string(dat)
+		return strings.TrimSpace(uuid)
+	}
+	def := uuid.NewV4().String()
+
+	return def
+}
+
+func saveUUID(uuid string) {
+	ioutil.WriteFile(uuidFile, []byte(uuid), 0644)
+}
+
 //machine-id is found in either /etc/machine-id or
 // /var/lib/dbus/machine-id 
 func getMachineID() (string, error) {
@@ -243,7 +277,9 @@ func getMachineID() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return string(contents), nil
+		s := string(contents)
+		s = strings.TrimSpace(s)
+		return s, nil
 	}
 
 	contents, err := readMachineID("/var/lib/dbus/machine-id")
@@ -259,44 +295,118 @@ func getMachineID() (string, error) {
 	return readMachineID("/etc/machine-id")
 }
 
-func getAddress() (Metadata, error) {
-	output := make(Metadata)
+///////////////////////////////////////////////////
+// TODO: Move to plugins :)
+
+func addIps(data Metadata) error {
+	if _, ok := data["Interfaces"].([]Identifier); !ok {
+		i := []Identifier{}
+	  data["Interfaces"] = i
+	}
+
 	inter, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return  err
 	}
 
 	for _, ifa := range inter {
 		addrs, err := ifa.Addrs()
 
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		for _, a := range addrs {
 			if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 				if ipnet.IP.To4() != nil {
-					output["ip_"+string(ifa.Name)] = ipnet.IP.String()
+					IPAddress := Identifier{"ip", ipnet.IP.String(), "ip_"+string(ifa.Name)}	
+					data["Interfaces"] = append(data["Interfaces"].([]Identifier), IPAddress)
 				}
 			}
 		}
 	}
 
-	return output, nil
+	return nil
 }
 
-func getDefaultUUID() string {
-	if dat, _ := ioutil.ReadFile(uuidFile); dat != nil {
-		uuid := string(dat)
-		return strings.TrimSpace(uuid)
+func addHost(data Metadata) error {
+	if _, ok := data["Interfaces"].([]Identifier); !ok {
+		i := []Identifier{}
+	  data["Interfaces"] = i
 	}
-	def := uuid.NewV4().String()
 
-	return def
+	host, err := os.Hostname()
+
+	if err != nil {
+		return err
+	}
+
+	Host := Identifier{"host", host + ".local", "Hostname"}
+	data["Interfaces"] = append(data["Interfaces"].([]Identifier), Host)
+
+	return nil
 }
 
-func saveUUID(uuid string) {
-	ioutil.WriteFile(uuidFile, []byte(uuid), 0644)
+func addSerial(data Metadata) error {
+	if _, ok := data["Interfaces"].([]Identifier); !ok {
+	  	i := []Identifier{}
+  		data["Interfaces"] = i
+	}
+
+	serial , err := getSerial()
+	if err != nil {
+		return err
+	}
+
+	Serial := Identifier{"serial", serial, "Serial Number"}
+	data["Interfaces"] = append(data["Interfaces"].([]Identifier), Serial)	
+	
+	return nil
+}
+
+func addMachineID(data Metadata) error {
+	if _, ok := data["Interfaces"].([]Identifier); !ok {
+		i := []Identifier{}
+		data["Interfaces"] = i
+  	}
+
+	machineID, err := getMachineID()
+	
+	if err != nil {
+		return err
+	}
+
+	MachineID := Identifier{"machine-id", machineID, "Dbus machine-id"}
+	data["Interfaces"] = append(data["Interfaces"].([]Identifier), MachineID)	
+
+	return nil
+}
+
+func addMac(data Metadata) error {
+	if _, ok := data["Interfaces"].([]Identifier); !ok {
+		i := []Identifier{}
+		data["Interfaces"] = i
+	}
+
+	mac, err := getMac("wlan0")
+	if err != nil {
+		return err
+	}
+	
+	MacWlan0 := Identifier{"mac48", mac, "MAC 48 Ethernet interface wlan0"}
+	data["Interfaces"] = append(data["Interfaces"].([]Identifier), MacWlan0)
+
+	mac, err = getMac("eth0")
+
+	if err != nil {
+		return err
+	}
+
+	MacEth0 := Identifier{"mac48", mac, "MAC 48 Ethernet interface eth0"}
+	
+	data["Interfaces"] = append(data["Interfaces"].([]Identifier), MacEth0)
+
+	return nil
 }
 
 func getSerial() (string, error) {
