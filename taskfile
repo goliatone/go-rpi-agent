@@ -1,5 +1,10 @@
 #!/bin/bash
 
+######### LOAD ENV FILE IF PRESENT #########
+if [ -f .taskenv ]; then
+    source .taskenv
+fi
+
 if [ -z ${RPI_USER+x} ]; then 
     RPI_USER=pi
 fi
@@ -15,6 +20,34 @@ fi
 if [ -z ${SERVICE_NAME+x} ]; then 
     SERVICE_NAME=rpi-builder
 fi
+
+######### KEY MANAGEMENT #############
+# Create certificates to be loaded in the remote machine
+# to execute tasks
+function certs:create {
+    local email=${1:-$(git config --global --get user.email)}
+    local certs=${2:-"$(pwd)/ops/certs/dkit_rsa"}
+
+    ssh-keygen -t rsa -b 4096 -N "" -C "$email" -f $certs
+}
+
+# Install certificates in remote machin
+# @arg 1 user [pi] SSH user
+# @arg 2 host [raspberry] SSH host
+# @arg 2 certs [./ops/certs/dkit_rsa] SSH identity key
+function certs:install {
+    local user=${1:-pi}
+    local host=${2:-raspberry}
+    local certs=${3:-"$(pwd)/ops/certs/dkit_rsa"}
+    ssh-copy-id -i "$certs" $user@$host
+}
+
+function rpi:ssh {
+    local user=${1:-$RPI_USER}
+    local host=${2:-$RPI_HOST}
+
+    ssh -i ./ops/certs/dkit_rsa $user@$host
+}
 
 
 function gvm:install {
@@ -38,15 +71,48 @@ function rpi:build {
     env GOOS=linux GOARCH=arm GOARM=5 go build -o ./bin/arm/rpi-agent main.go
 }
 
+function tag:upsert {
+    local tag=${1}
+
+    if [ -z "$tag" ]; then 
+        echo $(tag:get)
+    else 
+        tag:set $tag
+        echo $(tag:get)
+    fi
+}
+
+function tag:get {
+    local tag=$(cat ./.version)
+
+    if [ -z "$tag" ]; then 
+        tag="0.0.1"
+        tag:set $tag
+    fi
+
+    echo $tag
+}
+
+function tag:set {
+    local tag=${1}
+    if [ -z "$tag" ]; then 
+        exit 1
+    fi
+
+    echo -n "$tag" > "./.version"
+}
+
 function rpi:mv {
-    echo "update agent..."
-    echo "stop rpi-agent service"
+    echo ""
+    echo "running rpi:mv..."
     
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
-
+    
+    local dir=$(pwd)
     local certs="-i $dir/ops/certs/dkit_rsa"
 
+    echo "stop rpi-agent service"
     ssh $certs $user@$host -C "sudo systemctl stop rpi-agent.service"
 
     #TODO: we prob want to give it a random name to prevent clashes
@@ -61,9 +127,12 @@ function rpi:mv {
 }
 
 function release:build {
+    echo ""
+    echo "running release:build..."
+
     mkdir -p ./bin/arm
     
-    VERSION=${1:-0.0.1}
+    VERSION=$(tag:upsert $1)
     BUILD_DATE=`date -u +%Y%m%d.%H%M%S`
     
     echo "go build ldflags -X main.VERSION=$VERSION -X main.BUILD_DATE=$BUILD_DATE"
@@ -71,10 +140,12 @@ function release:build {
 }
 
 function release:update {
-    echo "release upddate..."
+    echo ""
+    echo "run release:upddate..."
+
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
-    local tag=${3:-0.0.1}
+    local tag=$(tag:upsert $3)
 
     release:build $tag 
     rpi:mv $user $host
@@ -90,30 +161,38 @@ function release:update {
 # @arg 3 {string} envfile Env file used for service
 # @arg 4 {string} [tag=0.0.1]
 function service:install {
+    echo "running service:install..."
 
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
     local envfile=$3
-    # local uuid=${3:-$RPI_UUID}
-    local tag=${4:-0.0.1}
+    local tag=$(tag:upsert $4)
 
-    local dir
-    dir=$(pwd)
+    local dir=$(pwd)
+    local script="ops/scripts/installer"
 
     local certs="-i $dir/ops/certs/dkit_rsa"
+    
+    scp -i "$dir/ops/certs/dkit_rsa" -r "$dir/ops/service" "$user@$host":/tmp/
 
     release:build $tag
 
     rpi:mv $user $host
 
+    echo "check for envfile in arguments..."
+
     if [ -z "$envfile" ]; then
         echo "we are using default env configuration for device..."
     else
-        ssh "$certs" "$user@$host" -C "sudo -u$user mkdir -p /tmp/service/opt/$SERVICE_NAME/"
-        scp "$certs" "$envfile" "$user@$host":/tmp/service/opt/$SERVICE_NAME/$SERVICE_NAME.env 
-    fiq
+        echo "creating remote temp file with env..."
+        ssh -i ./ops/certs/dkit_rsa "$user@$host" -C "sudo -u$user mkdir -p /tmp/service/opt/$SERVICE_NAME/"
+        
+        echo "sending env file to remote host..."
+        scp -i ./ops/certs/dkit_rsa "$envfile" "$user@$host":/tmp/service/opt/$SERVICE_NAME/$SERVICE_NAME.env 
+    fi
     
-    ssh "$certs" "$user@$host" 'bash -s' < "$dir/$script"
+    echo "start running installer script..."
+    ssh -i ./ops/certs/dkit_rsa "$user@$host" 'bash -s' < "$dir/$script"
 
     test:service $host
 }
@@ -128,11 +207,8 @@ function service:update {
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
     local envfile=$3
-    local script="ops/scripts/uninstaller"
 
-    local dir
-    dir=$(pwd)
-
+    local dir=$(pwd)
     local certs="-i $dir/ops/certs/dkit_rsa"
 
     # if [ -z ${envfile+x} ]; then 
@@ -143,7 +219,7 @@ function service:update {
     fi
 
     if [ -z "$4" ]; then
-        release:build $4
+        release:build local $(tag:upsert $4)
     fi
 
     rpi:mv "$user" "$host"
@@ -155,10 +231,9 @@ function service:update {
 function service:uninstall {
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
-    local script="ops/scripts/uninstaller"
 
-    local dir
-    dir=$(pwd)
+    local dir=$(pwd)
+    local script="ops/scripts/uninstaller"
 
     local certs="-i $dir/ops/certs/dkit_rsa"
 
@@ -166,6 +241,8 @@ function service:uninstall {
 }
 
 function test:service {
+    echo ""
+    echo "run test:service..."
     local host=${1:-$RPI_HOST}
     curl -s $host:8080 | jq
 }
