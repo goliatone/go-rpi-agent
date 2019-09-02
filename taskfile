@@ -200,13 +200,13 @@ function service:install {
 # update binary and service on host machine
 # @arg 1 {string} [user=pi] Username
 # @arg 2 {string} [host=raspberry] Hostname
-# @arg 3 {string} envfile Env file used for service
-# @arg 4 {string} tag If present triggers binary build
+# @arg 3 {string} tag If present triggers binary build
+# @arg 4 {string} envfile Env file used for service
 function service:update {
     
     local user=${1:-$RPI_USER}
     local host=${2:-$RPI_HOST}
-    local envfile=$3
+    local envfile=$4
 
     local dir=$(pwd)
     local certs="-i $dir/ops/certs/dkit_rsa"
@@ -218,8 +218,9 @@ function service:update {
         scp "$certs" "$envfile" "$user@$host":/opt/$SERVICE_NAME/$SERVICE_NAME.env 
     fi
 
-    if [ -z "$4" ]; then
-        release:build local $(tag:upsert $4)
+    if [ -z "$3" ]; then
+        echo "build a new release..."
+        release:build $(tag:upsert $3)
     fi
 
     rpi:mv "$user" "$host"
