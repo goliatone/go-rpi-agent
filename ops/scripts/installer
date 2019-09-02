@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -ex
 
 SERVICE_NAME=rpi-agent
@@ -7,7 +8,10 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp/}$(basename $0).XXXXXXXXXXXX")
 
 sed "s/User=pi/User=$USER/g" "/tmp/service/etc/systemd/system/$SERVICE_NAME.service" > "$tmpdir/$SERVICE_NAME.service"
 
-sudo mkdir -p /opt/$SERVICE_NAME/scripts
+### TODO: This should be a default directory 
+sudo mkdir -p /opt/$SERVICE_NAME/templates
+sudo cp /tmp/service/templates/* /opt/$SERVICE_NAME/templates/
+
 sudo cp /tmp/service/opt/$SERVICE_NAME/$SERVICE_NAME.env /opt/$SERVICE_NAME/$SERVICE_NAME.env
 
 sudo chown -R "$USER" /opt/$SERVICE_NAME
@@ -24,11 +28,9 @@ sudo mkdir -p /usr/local/src/$SERVICE_NAME/metadata
 sudo chown -R $USER /usr/local/src/$SERVICE_NAME/
 METADATA="/usr/local/src/$SERVICE_NAME/metadata/.device_uuid"
 if [ ! -e $METADATA ]; then echo $(cat /proc/sys/kernel/random/uuid) > ${METADATA}; fi
-
 ########## 
 
-
-sudo mkdir /var/log/$SERVICE_NAME
+sudo mkdir -p /var/log/$SERVICE_NAME
 sudo touch /var/log/$SERVICE_NAME/$SERVICE_NAME.log
 sudo chown -R root:adm /var/log/$SERVICE_NAME
 
