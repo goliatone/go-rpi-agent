@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path"
 	"bytes"
 	"flag"
 	"encoding/json"
@@ -37,14 +38,29 @@ var (
 	domain  	= flag.String("domain", "local", "Set the search domain. For local networks, default is fine.")
 	service		= flag.String("service", "_rpi._tcp", "Set the service category to look for devices.")
 	port    	= flag.Int("port", 8080, "Service port.")
-	registryUrl = flag.String("registry", "", "Registry service URL.")
+	registryURL = flag.String("registry", "", "Registry service URL.")
 	tplPath		= flag.String("registry-tpl", "/opt/rpi-agent/templates/default.tpl.json", "Path to registry payload template.")
+	showVersion = flag.Bool("version", false, "Show version")
 )
 
+//Metadata holds data we will send over to the registry
 type Metadata map[string]interface{}
+
+func init() {
+	flag.Usage = func() {
+		fmt.Printf("Usage of %s:\n", "rpi-agent")
+		flag.PrintDefaults()
+		fmt.Printf("Version: %s, Build: %s\n", VERSION, BUILD_DATE)
+	}
+}
 
 func main() {
 	flag.Parse()
+
+	if *showVersion == true {
+		log.Printf("version %s build %s", VERSION, BUILD_DATE)
+		os.Exit(0)
+	}
 
 	//TODO: Take parameters for name, service...
 	deviceUUID := getDefaultUUID()
@@ -102,10 +118,10 @@ func startService(deviceUUID string) {
 
 	metadata["serial"] = serial
 
-	machineId, err := getMachineID()
+	machineID, err := getMachineID()
 	handleError(err, "Error GetMachineID: ")
 
-	metadata["machine-id"] = machineId
+	metadata["machine-id"] = machineID
 
 	startTime := time.Now()
 	// metadata["agent_start"] = startTime.Unix()
@@ -124,13 +140,13 @@ func startService(deviceUUID string) {
 	output := make(Metadata)
 
 	output["metadata"] = metadata
-	output["uuid"] = deviceUUID
+	output["Uuid"] = deviceUUID
 	output["name"] = getNameFromHostname(host, "")
 	output["status"] = "online"
 	output["alias"] = serial
 
-	if registryUrl != nil {
-		registerAgent(*registryUrl, output)
+	if registryURL != nil {
+		registerAgent(*registryURL, output)
 	}
 
 	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
@@ -164,7 +180,11 @@ func handleError(err error, msg string) {
 
 func registerAgent(url string, meta Metadata) (*http.Response, error) {
 
-	t := template.New("payload")
+	n := path.Base(*tplPath)
+	t := template.New(n)
+	
+	log.Printf("loading template from \"%s\"\n", *tplPath)
+
 	tmpl, err := t.ParseFiles(*tplPath)
 	
 	if err != nil {
@@ -172,9 +192,15 @@ func registerAgent(url string, meta Metadata) (*http.Response, error) {
 		return nil,err
 	}
 
+	jsonMeta, err := json.MarshalIndent(meta, "", "    ")
+	if err == nil {
+		log.Printf("metadata: %s", string(jsonMeta))
+	}
+	
+
 	var output bytes.Buffer 
 	if err = tmpl.Execute(&output, meta); err != nil {
-		log.Fatal("Execute template:", err)
+		log.Fatal("FATAL registerAgent: ", err)
 		return nil,err
 	}
 
@@ -184,7 +210,7 @@ func registerAgent(url string, meta Metadata) (*http.Response, error) {
 		return nil, err
 	}
 
-	log.Printf("POST: %s %s\n", url, output)
+	log.Printf("POST: %s %s\n", url, output.String())
 
 	req.Header.Set("Content-Type", "application/json")
 
