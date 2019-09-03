@@ -1,6 +1,8 @@
 package main
 
 import (
+	"plugin"
+	"path/filepath"
 	"path"
 	"bytes"
 	"flag"
@@ -20,17 +22,8 @@ import (
 
 	"github.com/grandcat/zeroconf"
 	"github.com/twinj/uuid"
+	// "github.com/goliatone/plugin"
 )
-
-//Metadata holds data we will send over to the registry
-type Metadata map[string]interface{}
-
-//Identifier are different key value pairs that help identify this device
-type Identifier struct {
-	Name string
-	Value string
-	Description string
-}
 
 //TODO: make configurable
 const (
@@ -53,12 +46,67 @@ var (
 	showVersion = flag.Bool("version", false, "Show version")
 )
 
+//TODO: Have these in separate file
+//Metadata holds data we will send over to the registry
+type Metadata map[string]interface{}
+
+//Identifier are different key value pairs that help identify this device
+type Identifier struct {
+	Name string
+	Value string
+	Description string
+}
+
+const REGISTRABLE_VAR = "Registrable"
+
+// MetadataPlugin defines plugin interface
+type MetadataPlugin interface {
+	AddMeta(data map[string]interface{}) error
+}
+
+var plugins []MetadataPlugin
+
+// var PluginRegistry Registry
+
 func init() {
+	// PluginRegistry = NewRegistry()
+	// Load()
 	flag.Usage = func() {
 		fmt.Printf("Usage of %s:\n", "rpi-agent")
 		flag.PrintDefaults()
 		fmt.Printf("Version: %s, Build: %s\n", VERSION, BUILD_DATE)
 	}
+
+
+	// data := make(Metadata)
+
+	f, err := filepath.Glob("./plugins/*.so")
+	if err != nil {
+		fmt.Println("panic here")
+		panic(err)
+	}
+	for _, filename := range(f) {
+		fmt.Printf("loading plugin %s\n", filename)
+		p, err := plugin.Open(filename)
+		if err != nil {
+			panic(err)
+		}
+		pMeta, err := p.Lookup(REGISTRABLE_VAR)
+		if err != nil {
+			fmt.Printf("not registrable %s\n", filename)
+			panic(err)
+		}
+
+		if metaPlugin, ok := pMeta.(MetadataPlugin); ok {
+			// err = metaPlugin.RegisterDecoder(r.Decoder.Register)
+			fmt.Printf("adding plugin to plugin list %s\n", filename)
+			plugins = append(plugins, metaPlugin)	
+			// metaPlugin.AddMeta(data)
+		}
+	}
+
+	// fmt.Printf("%v", data)
+	// os.Exit(0)
 }
 
 func main() {
