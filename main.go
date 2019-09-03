@@ -22,6 +22,16 @@ import (
 	"github.com/twinj/uuid"
 )
 
+//Metadata holds data we will send over to the registry
+type Metadata map[string]interface{}
+
+//Identifier are different key value pairs that help identify this device
+type Identifier struct {
+	Name string
+	Value string
+	Description string
+}
+
 //TODO: make configurable
 const (
 	uuidFile = "/usr/local/src/rpi-agent/metadata/.device_uuid"
@@ -42,17 +52,6 @@ var (
 	tplPath		= flag.String("registry-tpl", "/opt/rpi-agent/templates/default.tpl.json", "Path to registry payload template.")
 	showVersion = flag.Bool("version", false, "Show version")
 )
-
-//Metadata holds data we will send over to the registry
-type Metadata map[string]interface{}
-
-//Identifier are different key value pairs that help identify this device
-type Identifier struct {
-	Name string
-	Value string
-	Description string
-}
-
 
 func init() {
 	flag.Usage = func() {
@@ -268,33 +267,6 @@ func saveUUID(uuid string) {
 	ioutil.WriteFile(uuidFile, []byte(uuid), 0644)
 }
 
-//machine-id is found in either /etc/machine-id or
-// /var/lib/dbus/machine-id 
-func getMachineID() (string, error) {
-
-	readMachineID := func (filepath string) (string, error) {
-		contents, err := ioutil.ReadFile(filepath)	
-		if err != nil {
-			return "", err
-		}
-		s := string(contents)
-		s = strings.TrimSpace(s)
-		return s, nil
-	}
-
-	contents, err := readMachineID("/var/lib/dbus/machine-id")
-	
-	if err != nil {
-		return "", err
-	}
-
-	if contents != "" {
-		return contents, nil
-	}
-
-	return readMachineID("/etc/machine-id")
-}
-
 ///////////////////////////////////////////////////
 // TODO: Move to plugins :)
 
@@ -437,4 +409,31 @@ func getMac(iface string) (string, error) {
 	}
 	mac := strings.Replace(string(contents), "\n", "", -1)
 	return mac, nil
+}
+
+//machine-id is found in either /etc/machine-id or
+// /var/lib/dbus/machine-id 
+func getMachineID() (string, error) {
+
+	readMachineID := func (filepath string) (string, error) {
+		contents, err := ioutil.ReadFile(filepath)	
+		if err != nil {
+			return "", err
+		}
+		s := string(contents)
+		s = strings.TrimSpace(s)
+		return s, nil
+	}
+
+	contents, err := readMachineID("/var/lib/dbus/machine-id")
+	
+	if err != nil {
+		return "", err
+	}
+
+	if contents != "" {
+		return contents, nil
+	}
+
+	return readMachineID("/etc/machine-id")
 }
