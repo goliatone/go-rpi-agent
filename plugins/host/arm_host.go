@@ -4,34 +4,32 @@ import (
 	"os"
 )
 
-//Metadata interface
-type Metadata map[string]interface{}
+// Registrable is the name to lookup after loading the plugin for the module registering
+var Registrable registrable
 
-//Identifier are different key value pairs that help identify this device
+type registrable int
+
+//Identifier should be imported from main package
 type Identifier struct {
 	Name string
 	Value string
 	Description string
 }
 
-//MetadataPlugin is a simple interface that defines
-//the AddMeta and AddStatus methods
-type MetadataPlugin struct {}
-
 //AddMeta ...
-func (m MetadataPlugin) AddMeta(data Metadata) error {
+func (p *registrable) AddMeta(data map[string]interface{}) error {
 	if _, ok := data["Interfaces"].([]Identifier); !ok {
 		i := []Identifier{}
 	  data["Interfaces"] = i
 	}
-	
+
 	host, err := os.Hostname()
 
 	if err != nil {
 		return err
 	}
 
-	Host := Identifier{"host", host + ".local", "Hostname"}
+	Host := Identifier{"host", host, "Hostname"}
 	data["Interfaces"] = append(data["Interfaces"].([]Identifier), Host)
 
 	return nil
