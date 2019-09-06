@@ -1,13 +1,13 @@
 package main 
 
 import (
-	"os"
 	"net"
-	"strings"
 )
 
-//Metadata interface
-type Metadata map[string]interface{}
+// Registrable is the name to lookup after loading the plugin for the module registering
+var Registrable registrable
+
+type registrable int
 
 //Identifier are different key value pairs that help identify this device
 type Identifier struct {
@@ -16,12 +16,8 @@ type Identifier struct {
 	Description string
 }
 
-//MetadataPlugin is a simple interface that defines
-//the AddMeta and AddStatus methods
-type MetadataPlugin struct {}
-
 //AddMeta ...
-func (m MetadataPlugin) AddMeta(data Metadata) error {
+func (p *registrable) AddMeta(data map[string]interface{}) error {
 	if _, ok := data["Interfaces"].([]Identifier); !ok {
 		i := []Identifier{}
 		data["Interfaces"] = i
@@ -48,16 +44,20 @@ func (m MetadataPlugin) AddMeta(data Metadata) error {
 	return nil
 }
 
-
 func getMac(iface string) (string, error) {
 	
 	ifs, _ := net.Interfaces()
+	out := ""
  	for _, v := range ifs {
+		if v.Name != iface {
+			continue
+		}
+
     	h := v.HardwareAddr.String()
     	if len(h) == 0 {
         	continue
      	}
-     	si.Macs = append(si.Macs, h)
+		out = h
  	}
-	return mac, nil
+	return out, nil
 }
