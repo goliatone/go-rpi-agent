@@ -1,0 +1,32 @@
+#!/bin/bash
+
+pushd ./plugins > /dev/null
+
+plugins=$(ls -d */ | sed 's#/##')
+
+mkdir -p ../bin/arm/plugins
+mkdir -p ../bin/darwin/plugins
+
+for dir in $plugins; do
+  echo "plugin: $dir"
+
+  darwin_file="./$dir/darwin_$dir.go"
+
+  if [[ -f "$darwin_file" ]]; then
+      echo "  darwin file found, building..."
+      go build -buildmode=plugin \
+        -o ../bin/darwin/plugins/$dir.so \
+        $darwin_file
+  fi
+
+  arm_file="./$dir/arm_$dir.go"
+
+  if [[ -f $arm_file ]]; then
+      
+      echo "  arm file found, building..."
+
+      go build -buildmode=plugin \
+        -o ../bin/arm/plugins/$dir.so \
+        $arm_file
+  fi  
+done
