@@ -49,6 +49,9 @@ function rpi:mv {
     echo "move agent to final destination directory..."
     ssh $user@$host -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
 
+    echo "restart daemon"
+    ssh $user@$host -C "sudo systemctl daemon-reload"
+
     echo "start rpi-agent service"
     ssh $user@$host -C "sudo systemctl start rpi-agent.service"
 }
@@ -86,6 +89,9 @@ function service:install {
 
     echo "scp service to $user@$host..."
     scp ./service/rpi-agent.service $user@$host:/tmp/rpi-agent.service
+
+    echo "use right user"
+    ssh $user@$host -C "sed -i 's/User=pi/User=${user}/g' /tmp/rpi-agent.service"
 
     echo "mv service..."
     ssh $user@$host -C "sudo mv /tmp/rpi-agent.service /etc/systemd/system/rpi-agent.service"
