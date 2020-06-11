@@ -1,6 +1,6 @@
 {
   "uuid": "{{.Uuid}}",
-       "interfaces: [
+       "interfaces": [
     {{range $i, $v := .Interfaces}}{{if $i}},
     {{end}}{ 
       "name": "{{$v.Name}}",
