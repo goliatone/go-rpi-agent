@@ -1,8 +1,12 @@
 #!/bin/bash
 
 ######### LOAD ENV FILE IF PRESENT #########
-if [ -f .taskenv ]; then
-    source .taskenv
+if [ -z ${TASKENV+x} ]; then
+    if [ -f .taskenv ]; then
+        source .taskenv
+    fi
+else 
+    source ${TASKENV}
 fi
 
 if [ -z ${RPI_USER+x} ]; then 
