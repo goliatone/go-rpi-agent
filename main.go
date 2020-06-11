@@ -88,7 +88,7 @@ func main() {
 	d := *domain
 	service, err := zeroconf.Register(
 		n, // service instance name
-		s,  // service type and protocl
+		s,  // service type and protocol
 		fmt.Sprintf("%s.", d),     // service domain
 		*port,         // service port
 		txtRecord,    // service metadata
@@ -111,7 +111,7 @@ func main() {
 	select {
 	case <- sig:
 	}
-	log.Println("Sutting down service...")
+	log.Println("Shutting down service...")
 }
 
 // HTTP service to introspect RPi instance
@@ -156,7 +156,7 @@ func startService(deviceUUID string) {
 
 		n := path.Base(*tplPath)
 		t := template.New(n)
-		tmpl, err := t.ParseFiles(*tplPath)
+		tpl, err := t.ParseFiles(*tplPath)
 	
 		if err != nil {
 			log.Fatal("Parse: ", err)
@@ -164,7 +164,7 @@ func startService(deviceUUID string) {
 		}
 
 		var output bytes.Buffer 
-		if err = tmpl.Execute(&output, meta); err != nil {
+		if err = tpl.Execute(&output, meta); err != nil {
 			log.Fatal("FATAL registerAgent: ", err)
 			return
 		}
@@ -204,7 +204,7 @@ func registerAgent(url string, meta Metadata) (*http.Response, error) {
 	
 	log.Printf("loading template from \"%s\"\n", *tplPath)
 
-	tmpl, err := t.ParseFiles(*tplPath)
+	tpl, err := t.ParseFiles(*tplPath)
 	
 	if err != nil {
 		log.Fatal("Parse: ", err)
@@ -218,7 +218,7 @@ func registerAgent(url string, meta Metadata) (*http.Response, error) {
 	
 
 	var output bytes.Buffer 
-	if err = tmpl.Execute(&output, meta); err != nil {
+	if err = tpl.Execute(&output, meta); err != nil {
 		log.Fatal("FATAL registerAgent: ", err)
 		return nil,err
 	}
