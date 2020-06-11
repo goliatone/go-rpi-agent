@@ -52,6 +52,7 @@ how to set TTL for record?
 
 TODO
 
+- [ ] Dynamically create service systemd to use right user
 - [ ] Take URL endpoint from flags
 - [ ] Refactor to use external template to configure POST payload
 - [ ] Add flag to run timer for POST payload
