@@ -68,7 +68,7 @@ func main() {
 	)
 
 	//Seconds, default value is 3200
-	service.TTL()
+	service.TTL(3200)
 
 	defer service.Shutdown()
 
