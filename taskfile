@@ -122,6 +122,9 @@ function rpi:mv {
     echo "move agent to final destination directory..."
     ssh $certs $user@$host -C "sudo mv /tmp/rpi-agent /usr/local/bin/rpi-agent"
 
+    echo "restart daemon"
+    ssh $user@$host -C "sudo systemctl daemon-reload"
+
     echo "start rpi-agent service"
     ssh $certs $user@$host -C "sudo systemctl start rpi-agent.service"
 }
