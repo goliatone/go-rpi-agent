@@ -1,6 +1,7 @@
 [Unit]
 Description=RPI agent
-Before=network.target
+ConditionPathExists=/usr/local/bin/rpi-agent
+After=network.target
  
 [Service]
 Type=simple
