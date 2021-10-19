@@ -1,6 +1,0 @@
-#!/bin/bash
-
-dir=$(dirname "$0")
-dir=$(basename $dir)
-
-go build -buildmode=plugin -o ./plugins/$dir.so ./plugins/serial/darwin_host.go

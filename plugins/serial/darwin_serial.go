@@ -1,9 +1,5 @@
 package main 
 
-import (
-	"os"
-)
-
 // Registrable is the name to lookup after loading the plugin for the module registering
 var Registrable registrable
 
@@ -20,17 +16,20 @@ type Identifier struct {
 func (p *registrable) AddMeta(data map[string]interface{}) error {
 	if _, ok := data["Interfaces"].([]Identifier); !ok {
 		i := []Identifier{}
-	  data["Interfaces"] = i
-	}
+		data["Interfaces"] = i
+  	}
 
-	host, err := os.Hostname()
-
-	if err != nil {
+  	serial , err := getSerial()
+  	if err != nil {
 		return err
-	}
+  	}
 
-	Host := Identifier{"host", host, "Hostname"}
-	data["Interfaces"] = append(data["Interfaces"].([]Identifier), Host)
+  	Serial := Identifier{"serial", serial, "Serial Number"}
+  	data["Interfaces"] = append(data["Interfaces"].([]Identifier), Serial)	
+  
+  	return nil
+}
 
-	return nil
+func getSerial() (string, error) {
+	return "1567738079529", nil
 }

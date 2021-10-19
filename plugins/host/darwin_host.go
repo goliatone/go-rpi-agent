@@ -3,7 +3,7 @@ package main
 
 import (
 	"os"
-	"fmt"
+	// "fmt"
 )
 
 // Registrable is the name to lookup after loading the plugin for the module registering
@@ -25,15 +25,22 @@ func (p *registrable) AddMeta(data map[string]interface{}) error {
 	  data["Interfaces"] = i
 	}
 
-	fmt.Println("Hello plugin world!")
 	host, err := os.Hostname()
 
 	if err != nil {
 		return err
 	}
 
-	Host := Identifier{"host", host + ".local", "Hostname"}
+	Host := Identifier{"host", host, "Hostname"}
 	data["Interfaces"] = append(data["Interfaces"].([]Identifier), Host)
 
 	return nil
 }
+
+
+// func main(){
+// 	data := make(map[string]interface{})
+// 	m := Registrable
+// 	m.AddMeta(data)
+// 	fmt.Print(data)
+// }
